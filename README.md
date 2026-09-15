@@ -25,7 +25,10 @@ another repository also supplies this ID.
 
 Run `python tools/build.py` with Python 3.11 or newer. No build dependencies are
 required. The output is `dist/plugin.audio.radiode-1.1.14.zip`.
-CI builds and checks pull requests and pushes to `main`; it never publishes them.
+CI builds and checks pull requests and pushes to `main`. After a successful push
+build on `main`, Publish Piers automatically publishes a newer addon version.
+Pull request builds never trigger publication. The exact successful source commit
+is used. Documentation-only changes with the same version skip publication.
 
 ## Initial GitHub setup
 
@@ -36,10 +39,13 @@ CI builds and checks pull requests and pushes to `main`; it never publishes them
 3. To enable publication, configure `REPO_SILVO_PAT` in this source repository's
    Actions secrets. It needs Contents read/write on `IkHadHonger/repository.silvo`.
    A secret configured in another repository is not automatically shared here.
-4. Run Publish Piers manually on `main` after testing. This writes only the radio
-   package and Piers indexes in `repository.silvo`, branch `cube-custom`.
+4. Test changes before merging to `main`, and increase the version in `addon.xml`
+   for each addon release (for example, 1.1.14 to 1.1.15). The version is not
+   automatically incremented. After a successful main push build, Publish Piers
+   writes the newer package and Piers indexes to `repository.silvo`, branch
+   `cube-custom`. Manual dispatch remains available for retries.
 
-There is no upstream synchronization or automatic deployment on push. AVDVPlus
+There is no upstream synchronization. Automatic publication targets Piers only. AVDVPlus
 is not a publication target. Existing repository addon 1.0.3 needs no version bump
 solely for adding an addon to its Piers catalogue.
 
