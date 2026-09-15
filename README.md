@@ -4,7 +4,12 @@ Independent maintenance source for `IkHadHonger/plugin.audio.radio.de`.
 Based on the user-supplied `plugin.audio.radiode-1.1.13-kodi22(1).zip`, not a
 verified export of an upstream Git commit. Original author: fivebanger.
 The included GPL version 2 license and existing author attribution are retained.
-This project is not endorsed by Radio.de. Upstream activity has not been verified.
+This project is not endorsed by Radio.de.
+
+Original upstream repository: [fivebanger/kodi_addons](https://github.com/fivebanger/kodi_addons).
+The upstream [Radio.de directory](https://github.com/fivebanger/kodi_addons/tree/master/plugin.audio.radiode)
+provides the original author's packaged addon. This repository independently
+maintains the supplied Kodi 22 adaptation; it is not a GitHub fork of upstream.
 
 ## Scope
 
