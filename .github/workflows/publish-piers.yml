@@ -1,6 +1,10 @@
 name: Publish Piers
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+    branches: [main]
 permissions:
   contents: read
 concurrency:
@@ -8,10 +12,18 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -26,12 +38,43 @@ jobs:
           ref: cube-custom
           path: repo-silvo
           token: ${{ secrets.REPO_SILVO_PAT }}
+      - name: Check release version
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          def version(path):
+              root = ET.parse(path).getroot()
+              assert root.attrib["id"] == "plugin.audio.radiode"
+              value = root.attrib["version"]
+              assert re.fullmatch(r"\d+\.\d+\.\d+", value), value
+              return tuple(map(int, value.split(".")))
+
+          source = version("addon.xml")
+          target_path = Path("repo-silvo/piers/plugin.audio.radiode/addon.xml")
+          target = version(target_path) if target_path.exists() else None
+          publish = target is None or source > target
+          if os.environ["EVENT_NAME"] == "workflow_dispatch":
+              publish = True
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"publish={str(publish).lower()}\n")
+          if not publish:
+              print("No newer addon version; publication skipped.")
+          PY
       - name: Validate, build and stage Piers package
+        if: steps.version.outputs.publish == 'true'
         run: python tools/stage_piers.py repo-silvo
       - name: Commit scoped Piers changes
+        if: steps.version.outputs.publish == 'true'
         working-directory: repo-silvo
         env:
-          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
