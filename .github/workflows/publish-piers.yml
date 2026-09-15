@@ -1,0 +1,44 @@
+name: Publish Piers
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: publish-radio-de-piers
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check publication credential
+        env:
+          REPO_PAT: ${{ secrets.REPO_SILVO_PAT }}
+        run: test -n "$REPO_PAT"
+      - name: Checkout Piers distribution branch
+        uses: actions/checkout@v4
+        with:
+          repository: IkHadHonger/repository.silvo
+          ref: cube-custom
+          path: repo-silvo
+          token: ${{ secrets.REPO_SILVO_PAT }}
+      - name: Validate, build and stage Piers package
+        run: python tools/stage_piers.py repo-silvo
+      - name: Commit scoped Piers changes
+        working-directory: repo-silvo
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- piers/plugin.audio.radiode piers/addons.xml piers/addons.xml.md5 piers/index.html
+          if git diff --cached --quiet; then
+            echo 'Package already published; no changes.'
+          else
+            git commit -m 'Publish Radio.de for Piers' -m "Source: IkHadHonger/plugin.audio.radio.de@$SOURCE_SHA"
+            git push origin HEAD:cube-custom
+          fi
