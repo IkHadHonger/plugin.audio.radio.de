@@ -6,7 +6,7 @@ on:
     types: [completed]
     branches: [main]
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: publish-radio-de-piers
   cancel-in-progress: false
@@ -38,35 +38,35 @@ jobs:
           ref: cube-custom
           path: repo-silvo
           token: ${{ secrets.REPO_SILVO_PAT }}
-      - name: Check release version
-        id: version
-        env:
-          EVENT_NAME: ${{ github.event_name }}
+      - name: Verify current main
+        id: current
         run: |
-          python - <<'PY'
-          import os
-          import re
-          import xml.etree.ElementTree as ET
-          from pathlib import Path
-
-          def version(path):
-              root = ET.parse(path).getroot()
-              assert root.attrib["id"] == "plugin.audio.radiode"
-              value = root.attrib["version"]
-              assert re.fullmatch(r"\d+\.\d+\.\d+", value), value
-              return tuple(map(int, value.split(".")))
-
-          source = version("addon.xml")
-          target_path = Path("repo-silvo/piers/plugin.audio.radiode/addon.xml")
-          target = version(target_path) if target_path.exists() else None
-          publish = target is None or source > target
-          if os.environ["EVENT_NAME"] == "workflow_dispatch":
-              publish = True
-          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write(f"publish={str(publish).lower()}\n")
-          if not publish:
-              print("No newer addon version; publication skipped.")
-          PY
+          remote_sha=$(git ls-remote origin refs/heads/main | cut -f1)
+          test -n "$remote_sha"
+          if [ "$(git rev-parse HEAD)" = "$remote_sha" ]; then
+            echo "latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "latest=false" >> "$GITHUB_OUTPUT"
+            echo "Superseded source commit; a newer main build owns publication."
+          fi
+      - name: Allocate addon version
+        if: steps.current.outputs.latest == 'true'
+        id: version
+        run: python tools/prepare_release.py
+      - name: Validate versioned package
+        if: steps.version.outputs.publish == 'true'
+        run: python tools/build.py
+      - name: Save automatic version in source
+        if: steps.version.outputs.bumped == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- addon.xml
+          git commit -m 'Bump addon version for automatic Piers release'
+          git push origin HEAD:main
+      - name: Record release source
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Validate, build and stage Piers package
         if: steps.version.outputs.publish == 'true'
         run: python tools/stage_piers.py repo-silvo
@@ -74,7 +74,7 @@ jobs:
         if: steps.version.outputs.publish == 'true'
         working-directory: repo-silvo
         env:
-          SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
